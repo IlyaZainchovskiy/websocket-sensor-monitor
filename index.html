@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Моніторинг Температури</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .dashboard {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 320px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .sensor-display {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            border: 8px solid #ddd;
+            background: #fafafa;
+            transition: border-color 0.5s ease;
+        }
+
+        .temperature-value {
+            font-size: 3.5rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .unit {
+            font-size: 1.5rem;
+            color: #7f8c8d;
+            vertical-align: super;
+        }
+
+        .status-box {
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-normal { background-color: #d4edda; color: #155724; }
+        .status-warning { background-color: #f8d7da; color: #721c24; animation: pulse 1.5s infinite; }
+        .status-error { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+
+        .settings {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        #limitInput {
+            width: 50px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <h1>Онлайн Сенсор</h1>
+        
+        <div class="sensor-display" id="sensorCircle">
+            <div>
+                <span class="temperature-value" id="tempValue">--</span>
+                <span class="unit">°C</span>
+            </div>
+        </div>
+
+        <div id="statusMessage" class="status-box status-error">
+            Підключення...
+        </div>
+
+        <div class="settings">
+            <label for="limitInput">Поріг попередження: </label>
+            <input type="number" id="limitInput" value="35"> °C
+        </div>
+    </div>
+
+    <script>
+        const tempElement = document.getElementById('tempValue');
+        const statusElement = document.getElementById('statusMessage');
+        const sensorCircle = document.getElementById('sensorCircle');
+        const limitInput = document.getElementById('limitInput');
+
+        let wsUrl = 'ws://localhost:3000';
+
+        if (window.location.host && window.location.protocol !== 'file:') {
+            wsUrl = window.location.protocol === 'https:' 
+                ? 'wss://' + window.location.host 
+                : 'ws://' + window.location.host;
+        }
+
+        console.log('Спроба підключення до:', wsUrl);
+
+        let ws;
+
+        function connect() {
+            try {
+                ws = new WebSocket(wsUrl);
+            } catch (err) {
+                console.error("Критична помилка створення WebSocket:", err);
+                statusElement.textContent = " Помилка адреси сервера";
+                return;
+            }
+
+            ws.onopen = () => {
+                console.log('Підключено до сервера');
+                statusElement.textContent = 'З\'єднання встановлено';
+                statusElement.className = 'status-box status-normal';
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'UPDATE') {
+                        updateDisplay(parseFloat(data.value));
+                    }
+                } catch (e) {
+                    console.error('Помилка даних:', e);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('З\'єднання втрачено');
+                statusElement.className = 'status-box status-error';
+            };
+        }
+
+        connect();
+
+        function updateDisplay(temp) {
+            tempElement.textContent = temp.toFixed(1);
+            const limit = parseFloat(limitInput.value);
+
+            if (temp > limit) {
+                statusElement.textContent = `УВАГА: Перегрів! (> ${limit}°C)`;
+                statusElement.className = 'status-box status-warning';
+                sensorCircle.style.borderColor = '#dc3545';
+            } else {
+                statusElement.textContent = 'Температура в нормі';
+                statusElement.className = 'status-box status-normal';
+                sensorCircle.style.borderColor = '#28a745';
+            }
+        }
+    </script>
+</body>
+</html>
